@@ -1,5 +1,6 @@
 const express = require('express');
 const app = express();
+require('dotenv').config();
 const cors = require("cors");
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
@@ -7,7 +8,10 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
 
 const port = process.env.PORT || 2001;
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_51SdOhK7Jg6gJBZW4yW3LLS4IlKFHPqXdLI1l0OGBwvEV73Eq4BurzcM5sQCQPKF63POfxMo8aB44YjMy98NukFLZ00CuiVfdxp');
+
+// const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_51SdOhK7Jg6gJBZW4yW3LLS4IlKFHPqXdLI1l0OGBwvEV73Eq4BurzcM5sQCQPKF63POfxMo8aB44YjMy98NukFLZ00CuiVfdxp');
+// Line 12:
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // --- MIDDLEWARE FIX (Localhost এর জন্য সহজ করা হলো) ---
 app.use(cors({
@@ -18,7 +22,7 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-const uri = "mongodb+srv://Garments-order-system:ltx60bhXiHK8dSMG@cluster0.awjlwox.mongodb.net/?appName=Cluster0";
+const uri = `mongodb+srv://${Process.env.DB_USER}:${process.env.DB_PASS}@cluster0.awjlwox.mongodb.net/?appName=Cluster0`;
 
 const client = new MongoClient(uri, {
     serverApi: {
