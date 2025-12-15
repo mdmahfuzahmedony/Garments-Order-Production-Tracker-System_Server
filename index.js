@@ -7,7 +7,8 @@ require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 2001;
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+// যদি env না পায়, তবুও যেন সার্ভার ক্র্যাশ না করে
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 
 // --- MIDDLEWARE ---
 app.use(cors({
