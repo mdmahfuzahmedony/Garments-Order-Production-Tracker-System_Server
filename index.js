@@ -12,8 +12,8 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 // --- MIDDLEWARE ---
 app.use(cors({
     origin: [
-        'http://localhost:5173',
-        'https://garments-order-production-tracker-s-hazel.vercel.app' // আপনার লাইভ ফ্রন্টএন্ড লিংক
+        'http://localhost:5173', // Localhost Development
+        'https://garments-order-production-tracker-s-hazel.vercel.app' // Vercel Live Production
     ], 
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
@@ -22,7 +22,6 @@ app.use(express.json());
 app.use(cookieParser());
 
 // --- MONGODB CONNECTION ---
-// FIX: Process -> process (ছোট হাতের)
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.awjlwox.mongodb.net/?appName=Cluster0`;
 
 const client = new MongoClient(uri, {
@@ -33,13 +32,13 @@ const client = new MongoClient(uri, {
     }
 });
 
-// Collection গুলো গ্লোবাল করা হলো যাতে সব রাউট এক্সেস পায়
+// Collections (Global Scope)
 const db = client.db("Garments-order-System");
 const GarmentsCollection = db.collection("Garments-all-product");
 const booking_list = db.collection("Booking-list");
 const usersCollection = db.collection("users");
 
-// ডাটাবেস কানেকশন ফাংশন
+// Database Connection Function
 async function dbConnect() {
     try {
         await client.connect();
@@ -55,13 +54,13 @@ app.post('/jwt', async (req, res) => {
     const user = req.body;
     const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET || 'secret123', { expiresIn: '1h' });
 
-    // FIX: Production vs Local environment check
+    // Production Check
     const isProduction = process.env.NODE_ENV === 'production';
     
     res.cookie('token', token, {
         httpOnly: true,
-        secure: isProduction, // লাইভ হলে true
-        sameSite: isProduction ? 'none' : 'strict' // লাইভ হলে none
+        secure: isProduction, // True on Production
+        sameSite: isProduction ? 'none' : 'strict' // 'none' on Production
     })
     .send({ success: true });
 });
@@ -320,6 +319,10 @@ app.post('/create-checkout-session', verifyToken, async (req, res) => {
     try {
         const { productName, price, orderId, image } = req.body;
         const amount = Math.round(price * 100);
+
+        // 🔥 লাইভ লিংক এখানে সেট করা হয়েছে (Fixed) 🔥
+        const clientUrl = 'https://garments-order-production-tracker-s-hazel.vercel.app'; 
+
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: [{
@@ -331,8 +334,8 @@ app.post('/create-checkout-session', verifyToken, async (req, res) => {
                 quantity: 1,
             }],
             mode: 'payment',
-            success_url: `http://localhost:5173/dashboard/payment/success/${orderId}?transactionId={CHECKOUT_SESSION_ID}`,
-            cancel_url: `http://localhost:5173/dashboard/my-orders`,
+            success_url: `${clientUrl}/dashboard/payment/success/${orderId}?transactionId={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${clientUrl}/dashboard/my-orders`,
         });
         res.send({ url: session.url });
     } catch (error) {
