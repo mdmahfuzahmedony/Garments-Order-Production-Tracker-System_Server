@@ -87,7 +87,7 @@ app.post('/logout', async (req, res) => {
 });
 
 const verifyToken = (req, res, next) => {
-    const token = req.cookies ? .token;
+    const token = req.cookies ?.token;
     if (!token) return res.status(401).send({
         message: 'Unauthorized access'
     });
@@ -166,7 +166,7 @@ app.get('/users/admin/:email', verifyToken, async (req, res) => {
         email
     });
     res.send({
-        admin: user ? .role === 'admin'
+        admin: user ?.role === 'admin'
     });
 });
 
@@ -179,7 +179,7 @@ app.get('/users/manager/:email', verifyToken, async (req, res) => {
         email
     });
     res.send({
-        manager: user ? .role === 'manager'
+        manager: user ?.role === 'manager'
     });
 });
 
