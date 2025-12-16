@@ -19,7 +19,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_place
 app.use(cors({
     origin: [
         'http://localhost:5173', // Localhost
-        'https://garments-order-production-tracker-s-nu.vercel.app' // Vercel Production Link
+        'https://garments-order-production-tracker-s.vercel.app' // Vercel Production Link
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
