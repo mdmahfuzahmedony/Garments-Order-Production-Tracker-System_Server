@@ -11,14 +11,15 @@ require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 2001;
-// যদি env না পায়, তবুও যেন সার্ভার ক্র্যাশ না করে
+
+// Stripe initialization
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
 
 // --- MIDDLEWARE ---
 app.use(cors({
     origin: [
-        'http://localhost:5173', // Localhost Development
-        'https://garments-order-production-tracker-s.vercel.app' // Vercel Live Production
+        'http://localhost:5173', // Localhost
+        'https://garments-order-production-tracker-s-nu.vercel.app' // Vercel Production Link
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
@@ -26,7 +27,7 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-// --- MONGODB CONNECTION ---
+// --- MONGODB CONNECTION SETUP ---
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.awjlwox.mongodb.net/?appName=Cluster0`;
 
 const client = new MongoClient(uri, {
@@ -37,22 +38,28 @@ const client = new MongoClient(uri, {
     }
 });
 
-// Collections (Global Scope)
+// 🔥 VERCEL DATABASE CONNECTION FIX 🔥
+// আগের dbConnect() বাদ দিয়ে এই Middleware ব্যবহার করা হলো
+app.use(async (req, res, next) => {
+    try {
+        await client.connect();
+        // console.log("Database Connected!"); // Debugging (Optional)
+        next();
+    } catch (error) {
+        console.error("DB Connection Error:", error);
+        res.status(500).send({
+            message: "Database connection failed",
+            error: error.message
+        });
+    }
+});
+
+// Collections
 const db = client.db("Garments-order-System");
 const GarmentsCollection = db.collection("Garments-all-product");
 const booking_list = db.collection("Booking-list");
 const usersCollection = db.collection("users");
 
-// Database Connection Function
-async function dbConnect() {
-    try {
-        await client.connect();
-        console.log("Database Connected Successfully!");
-    } catch (error) {
-        console.error("DB Connection Failed:", error);
-    }
-}
-dbConnect();
 
 // --- AUTHENTICATION ---
 app.post('/jwt', async (req, res) => {
@@ -61,13 +68,12 @@ app.post('/jwt', async (req, res) => {
         expiresIn: '1h'
     });
 
-    // Production Check
     const isProduction = process.env.NODE_ENV === 'production';
 
     res.cookie('token', token, {
             httpOnly: true,
-            secure: isProduction, // True on Production
-            sameSite: isProduction ? 'none' : 'strict' // 'none' on Production
+            secure: isProduction,
+            sameSite: isProduction ? 'none' : 'strict'
         })
         .send({
             success: true
@@ -87,7 +93,7 @@ app.post('/logout', async (req, res) => {
 });
 
 const verifyToken = (req, res, next) => {
-    const token = req.cookies ?.token;
+    const token = req.cookies?.token;
     if (!token) return res.status(401).send({
         message: 'Unauthorized access'
     });
@@ -103,7 +109,7 @@ const verifyToken = (req, res, next) => {
 // --- ROUTES ---
 
 app.get('/', (req, res) => {
-    res.send('Server is Running');
+    res.send('Garments Server is Running...');
 });
 
 // --- PUBLIC ROUTES ---
@@ -166,7 +172,7 @@ app.get('/users/admin/:email', verifyToken, async (req, res) => {
         email
     });
     res.send({
-        admin: user ?.role === 'admin'
+        admin: user?.role === 'admin'
     });
 });
 
@@ -179,7 +185,7 @@ app.get('/users/manager/:email', verifyToken, async (req, res) => {
         email
     });
     res.send({
-        manager: user ?.role === 'manager'
+        manager: user?.role === 'manager'
     });
 });
 
@@ -192,6 +198,7 @@ app.post('/bookings', verifyToken, async (req, res) => {
         };
         const product = await GarmentsCollection.findOne(query);
 
+        // Stock Check
         if (!product || (product.availableQuantity || product.quantity) < booking.quantity) {
             return res.send({
                 error: true,
@@ -211,6 +218,8 @@ app.post('/bookings', verifyToken, async (req, res) => {
         }];
 
         const result = await booking_list.insertOne(booking);
+        
+        // Reduce Stock
         if (result.insertedId) {
             await GarmentsCollection.updateOne(query, {
                 $inc: {
@@ -453,6 +462,19 @@ app.patch('/users/update/:id', verifyToken, async (req, res) => {
     res.send(result);
 });
 
+// MANAGER REQUEST
+app.patch('/users/request-manager/:id', async (req, res) => {
+    const id = req.params.id;
+    const filter = { _id: new ObjectId(id) };
+    const updateDoc = {
+        $set: {
+            requestedRole: 'manager'
+        }
+    };
+    const result = await usersCollection.updateOne(filter, updateDoc);
+    res.send(result);
+});
+
 // --- PAYMENT ---
 app.post('/create-checkout-session', verifyToken, async (req, res) => {
     try {
@@ -464,7 +486,6 @@ app.post('/create-checkout-session', verifyToken, async (req, res) => {
         } = req.body;
         const amount = Math.round(price * 100);
 
-        // 🔥 লাইভ লিংক এখানে সেট করা হয়েছে (Fixed) 🔥
         const clientUrl = 'https://garments-order-production-tracker-s-nu.vercel.app';
 
         const session = await stripe.checkout.sessions.create({
@@ -481,6 +502,7 @@ app.post('/create-checkout-session', verifyToken, async (req, res) => {
                 quantity: 1,
             }],
             mode: 'payment',
+            // 🔥 URL টি ঠিক আছে
             success_url: `${clientUrl}/dashboard/payment/success/${orderId}?transactionId={CHECKOUT_SESSION_ID}`,
             cancel_url: `${clientUrl}/dashboard/my-orders`,
         });
@@ -495,6 +517,7 @@ app.post('/create-checkout-session', verifyToken, async (req, res) => {
     }
 });
 
+// 🔥 Payment Success Route (Webhook এর বদলে সিম্পল আপডেট)
 app.patch('/bookings/payment-success/:id', verifyToken, async (req, res) => {
     const id = req.params.id;
     const {
@@ -505,8 +528,8 @@ app.patch('/bookings/payment-success/:id', verifyToken, async (req, res) => {
     }, {
         $set: {
             paymentStatus: 'Paid',
-            transactionId,
-            status: 'Pending'
+            transactionId: transactionId,
+            status: 'Pending' // পেমেন্ট হলে পেন্ডিং থাকবে (ম্যানেজার অ্যাপ্রুভ করবে)
         }
     });
     res.send(result);
